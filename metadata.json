@@ -1,0 +1,5 @@
+{
+  "name": "NoWeb Finder",
+  "description": "Discover local businesses that don't have a website yet. Perfect for digital agencies and freelancers.",
+  "requestFramePermissions": ["geolocation"]
+}

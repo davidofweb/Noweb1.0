@@ -1,0 +1,59 @@
+{
+  "entities": {
+    "Bookmark": {
+      "title": "Bookmark",
+      "description": "A bookmarked business lead.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" },
+        "phone": { "type": "string" },
+        "category": { "type": "string" },
+        "socialMedia": {
+          "type": "object",
+          "properties": {
+            "instagram": { "type": "string" },
+            "facebook": { "type": "string" },
+            "whatsapp": { "type": "string" }
+          }
+        },
+        "attributes": {
+          "type": "object",
+          "properties": {
+            "isOpen": { "type": "boolean" },
+            "delivery": { "type": "boolean" },
+            "reservations": { "type": "boolean" },
+            "outdoorSeating": { "type": "boolean" }
+          }
+        },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "address", "category", "createdAt"]
+    },
+    "SearchHistory": {
+      "title": "Search History",
+      "description": "A record of a search performed by the user.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "category": { "type": "string" },
+        "location": { "type": "string" },
+        "resultsCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "category", "location", "resultsCount", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/bookmarks/{bookmarkId}": {
+      "schema": "Bookmark",
+      "description": "User's saved business leads."
+    },
+    "/users/{userId}/history/{historyId}": {
+      "schema": "SearchHistory",
+      "description": "Log of user searches."
+    }
+  }
+}
