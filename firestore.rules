@@ -15,8 +15,16 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() <= 256 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     // Validation Helpers
@@ -24,11 +32,14 @@ service cloud.firestore {
       return data.keys().hasAll(['userId', 'name', 'address', 'category', 'createdAt']) &&
              data.userId == request.auth.uid &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
-             data.address is string && data.address.size() > 0 && data.address.size() <= 500 &&
+             data.address is string && data.address.size() > 0 && data.address.size() <= 1000 &&
              data.category is string && data.category.size() <= 100 &&
              data.createdAt is timestamp &&
              (!data.keys().contains('socialMedia') || data.socialMedia is map) &&
-             (!data.keys().contains('attributes') || data.attributes is map);
+             (!data.keys().contains('attributes') || data.attributes is map) &&
+             (!data.keys().contains('hasWebsite') || data.hasWebsite is bool) &&
+             (!data.keys().contains('notes') || data.notes is string) &&
+             (!data.keys().contains('email') || data.email is string);
     }
 
     function isValidSearchHistory(data) {
@@ -36,7 +47,7 @@ service cloud.firestore {
              data.userId == request.auth.uid &&
              data.category is string && data.category.size() <= 100 &&
              data.location is string && data.location.size() <= 200 &&
-             data.resultsCount is number &&
+             data.resultsCount is int &&
              data.createdAt is timestamp;
     }
 
@@ -46,7 +57,9 @@ service cloud.firestore {
       match /bookmarks/{bookmarkId} {
         allow read: if isOwner(userId);
         allow create: if isOwner(userId) && isValidBookmark(request.resource.data) && isValidId(bookmarkId);
-        allow update: if false; 
+        allow update: if isOwner(userId) && isValidBookmark(request.resource.data) && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'address', 'phone', 'email', 'category', 'hasWebsite', 'socialMedia', 'attributes', 'notes', 'updatedAt', 'createdAt'])
+        );
         allow delete: if isOwner(userId);
       }
 

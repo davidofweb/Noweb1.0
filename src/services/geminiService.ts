@@ -6,6 +6,7 @@ export interface Business {
   name: string;
   address: string;
   phone?: string;
+  email?: string;
   category: string;
   hasWebsite: boolean;
   socialMedia?: {
@@ -23,12 +24,13 @@ export interface Business {
 }
 
 export async function searchBusinessesWithoutWebsites(category: string, location: string): Promise<Business[]> {
-  const prompt = `Find 10 ${category} businesses in ${location} that do not have an official website. 
+  const prompt = `Find as many ${category} businesses as possible (up to 30) in ${location} that do not have an official website. 
   Verify this using Google Search. 
   Return the results as a JSON array of objects with the following properties:
   - name: string
   - address: string
   - phone: string (optional)
+  - email: string (optional, if found on social media or local directories)
   - category: string
   - hasWebsite: boolean (should be false)
   - socialMedia: object (optional, include links to instagram, facebook, or whatsapp if found)
@@ -51,6 +53,7 @@ export async function searchBusinessesWithoutWebsites(category: string, location
               name: { type: Type.STRING },
               address: { type: Type.STRING },
               phone: { type: Type.STRING },
+              email: { type: Type.STRING },
               category: { type: Type.STRING },
               hasWebsite: { type: Type.BOOLEAN },
               socialMedia: {

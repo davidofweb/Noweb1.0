@@ -21,7 +21,8 @@ import {
   Clock,
   Truck,
   CalendarCheck,
-  Trees
+  Trees,
+  Mail
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -58,6 +59,10 @@ const CATEGORIES = [
   { value: "Hardware", label: "Hardware Store" },
   { value: "Florist", label: "Florist" },
   { value: "Plumber", label: "Plumbing Service" },
+  { value: "Realtor", label: "Realtor / Real Estate" },
+  { value: "Dental Clinic", label: "Dental Clinic" },
+  { value: "Skincare Clinic", label: "Skincare Clinic" },
+  { value: "Physiotherapy", label: "Physiotherapy Clinic" },
 ];
 
 export default function App() {
@@ -77,6 +82,8 @@ export default function App() {
     outdoorSeating: false,
   });
   const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 6;
 
   // Auth Listener
   useEffect(() => {
@@ -126,7 +133,12 @@ export default function App() {
   const handleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
+      if (error.code === 'auth/popup-closed-by-user') {
+        console.log("Login popup closed by user");
+        // No need to show a scary error, just skip
+        return;
+      }
       console.error("Login failed", error);
     }
   };
@@ -145,12 +157,13 @@ export default function App() {
     setIsLoading(true);
     setHasSearched(true);
     setView("search");
+    setCurrentPage(1);
     try {
       const data = await searchBusinessesWithoutWebsites(category, location);
       setResults(data);
 
-      // Save to history if logged in
-      if (user) {
+      // Save to history if logged in and authenticated
+      if (user && auth.currentUser) {
         const historyPath = `users/${user.uid}/history`;
         try {
           await addDoc(collection(db, historyPath), {
@@ -161,6 +174,7 @@ export default function App() {
             createdAt: serverTimestamp()
           });
         } catch (e) {
+          // If it's a permission error, we log it with context
           handleFirestoreError(e, OperationType.CREATE, historyPath);
         }
       }
@@ -178,7 +192,15 @@ export default function App() {
       return;
     }
 
-    const bookmarkId = btoa(`${business.name}-${business.address}`).replace(/[/+=]/g, '');
+    const rawId = `${business.name}-${business.address}`;
+    // Use a clean, safe slug for the ID to avoid any encoding/decoding issues or illegal characters.
+    const bookmarkId = rawId
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 120);
+    
     const bookmarkPath = `users/${user.uid}/bookmarks/${bookmarkId}`;
     const isAlreadyBookmarked = isBookmarked(business);
 
@@ -210,6 +232,12 @@ export default function App() {
   });
 
   const displayedResults = view === "bookmarks" ? bookmarks : filteredResults;
+  
+  const totalPages = Math.ceil(displayedResults.length / itemsPerPage);
+  const paginatedResults = displayedResults.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
   return (
     <div className="min-h-screen bg-[#f5f5f5] font-sans selection:bg-primary selection:text-primary-foreground">
@@ -463,171 +491,230 @@ export default function App() {
                 )}
               </motion.div>
             ) : displayedResults.length > 0 ? (
-              <motion.div 
-                key={view === "bookmarks" ? "bookmarks" : "results"}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="grid gap-6 md:grid-cols-2"
-              >
-                {displayedResults.map((business, index) => (
-                  <motion.div
-                    key={`${business.name}-${index}`}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
-                  >
-                    <Card className="group h-full border-none shadow-md transition-all hover:shadow-xl hover:shadow-black/5">
-                      <CardHeader>
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="space-y-1">
-                            <CardTitle className="text-xl font-bold leading-tight group-hover:text-primary">
-                              {business.name}
-                            </CardTitle>
-                            <CardDescription className="flex items-center gap-1.5">
-                              <Building2 className="h-3.5 w-3.5" />
-                              {business.category}
-                            </CardDescription>
+              <div className="space-y-8">
+                <motion.div 
+                  key={`${view}-${currentPage}`}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="grid gap-6 md:grid-cols-2"
+                >
+                  {paginatedResults.map((business, index) => (
+                    <motion.div
+                      key={`${business.name}-${index}`}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <Card className="group h-full border-none shadow-md transition-all hover:shadow-xl hover:shadow-black/5">
+                        <CardHeader>
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1">
+                              <CardTitle className="text-xl font-bold leading-tight group-hover:text-primary">
+                                {business.name}
+                              </CardTitle>
+                              <CardDescription className="flex items-center gap-1.5">
+                                <Building2 className="h-3.5 w-3.5" />
+                                {business.category}
+                              </CardDescription>
+                            </div>
+                            <div className="flex flex-col items-end gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 rounded-full"
+                                onClick={() => toggleBookmark(business)}
+                              >
+                                {isBookmarked(business) ? (
+                                  <BookmarkCheck className="h-5 w-5 text-primary fill-current" />
+                                ) : (
+                                  <Bookmark className="h-5 w-5 text-muted-foreground" />
+                                )}
+                              </Button>
+                              <Badge variant="secondary" className="bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400">
+                                No Website
+                              </Badge>
+                            </div>
                           </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              className="h-8 w-8 rounded-full"
-                              onClick={() => toggleBookmark(business)}
-                            >
-                              {isBookmarked(business) ? (
-                                <BookmarkCheck className="h-5 w-5 text-primary fill-current" />
-                              ) : (
-                                <Bookmark className="h-5 w-5 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="space-y-2 text-sm text-muted-foreground">
+                            <div className="flex items-start gap-2">
+                              <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span>{business.address}</span>
+                            </div>
+                            {business.phone && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="h-4 w-4 shrink-0" />
+                                <span>{business.phone}</span>
+                              </div>
+                            )}
+                            {business.email && (
+                              <div className="flex items-center gap-2">
+                                <Mail className="h-4 w-4 shrink-0" />
+                                <span className="truncate">{business.email}</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* Attributes/Features */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {business.attributes?.isOpen && (
+                              <Badge variant="outline" className="h-6 border-green-200 bg-green-50 text-[10px] text-green-700">
+                                <Clock className="mr-1 h-3 w-3" />
+                                Open Now
+                              </Badge>
+                            )}
+                            {business.attributes?.delivery && (
+                              <Badge variant="outline" className="h-6 border-blue-200 bg-blue-50 text-[10px] text-blue-700">
+                                <Truck className="mr-1 h-3 w-3" />
+                                Delivery
+                              </Badge>
+                            )}
+                            {business.attributes?.reservations && (
+                              <Badge variant="outline" className="h-6 border-purple-200 bg-purple-50 text-[10px] text-purple-700">
+                                <CalendarCheck className="mr-1 h-3 w-3" />
+                                Reservations
+                              </Badge>
+                            )}
+                            {business.attributes?.outdoorSeating && (
+                              <Badge variant="outline" className="h-6 border-orange-200 bg-orange-50 text-[10px] text-orange-700">
+                                <Trees className="mr-1 h-3 w-3" />
+                                Outdoor Seating
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Social Media Links */}
+                          {business.socialMedia && (
+                            <div className="flex flex-wrap gap-2">
+                              {business.socialMedia.instagram && (
+                                <a 
+                                  href={business.socialMedia.instagram} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 rounded-full bg-pink-50 px-3 py-1 text-[10px] font-semibold text-pink-600 transition-colors hover:bg-pink-100"
+                                >
+                                  <Instagram className="h-3 w-3" />
+                                  Instagram
+                                </a>
                               )}
-                            </Button>
-                            <Badge variant="secondary" className="bg-orange-100 text-orange-700 hover:bg-orange-100 dark:bg-orange-900/30 dark:text-orange-400">
-                              No Website
-                            </Badge>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="space-y-2 text-sm text-muted-foreground">
-                          <div className="flex items-start gap-2">
-                            <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                            <span>{business.address}</span>
-                          </div>
-                          {business.phone && (
-                            <div className="flex items-center gap-2">
-                              <Phone className="h-4 w-4 shrink-0" />
-                              <span>{business.phone}</span>
+                              {business.socialMedia.facebook && (
+                                <a 
+                                  href={business.socialMedia.facebook} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-[10px] font-semibold text-blue-600 transition-colors hover:bg-blue-100"
+                                >
+                                  <Facebook className="h-3 w-3" />
+                                  Facebook
+                                </a>
+                              )}
+                              {business.socialMedia.whatsapp && (
+                                <a 
+                                  href={business.socialMedia.whatsapp} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 text-[10px] font-semibold text-green-600 transition-colors hover:bg-green-100"
+                                >
+                                  <MessageCircle className="h-3 w-3" />
+                                  WhatsApp
+                                </a>
+                              )}
                             </div>
                           )}
-                        </div>
-                        
-                        {/* Attributes/Features */}
-                        <div className="flex flex-wrap gap-1.5">
-                          {business.attributes?.isOpen && (
-                            <Badge variant="outline" className="h-6 border-green-200 bg-green-50 text-[10px] text-green-700">
-                              <Clock className="mr-1 h-3 w-3" />
-                              Open Now
-                            </Badge>
-                          )}
-                          {business.attributes?.delivery && (
-                            <Badge variant="outline" className="h-6 border-blue-200 bg-blue-50 text-[10px] text-blue-700">
-                              <Truck className="mr-1 h-3 w-3" />
-                              Delivery
-                            </Badge>
-                          )}
-                          {business.attributes?.reservations && (
-                            <Badge variant="outline" className="h-6 border-purple-200 bg-purple-50 text-[10px] text-purple-700">
-                              <CalendarCheck className="mr-1 h-3 w-3" />
-                              Reservations
-                            </Badge>
-                          )}
-                          {business.attributes?.outdoorSeating && (
-                            <Badge variant="outline" className="h-6 border-orange-200 bg-orange-50 text-[10px] text-orange-700">
-                              <Trees className="mr-1 h-3 w-3" />
-                              Outdoor Seating
-                            </Badge>
-                          )}
-                        </div>
 
-                        {/* Social Media Links */}
-                        {business.socialMedia && (
-                          <div className="flex flex-wrap gap-2">
-                            {business.socialMedia.instagram && (
-                              <a 
-                                href={business.socialMedia.instagram} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 rounded-full bg-pink-50 px-3 py-1 text-[10px] font-semibold text-pink-600 transition-colors hover:bg-pink-100"
-                              >
-                                <Instagram className="h-3 w-3" />
-                                Instagram
-                              </a>
-                            )}
-                            {business.socialMedia.facebook && (
-                              <a 
-                                href={business.socialMedia.facebook} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-[10px] font-semibold text-blue-600 transition-colors hover:bg-blue-100"
-                              >
-                                <Facebook className="h-3 w-3" />
-                                Facebook
-                              </a>
-                            )}
-                            {business.socialMedia.whatsapp && (
-                              <a 
-                                href={business.socialMedia.whatsapp} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 text-[10px] font-semibold text-green-600 transition-colors hover:bg-green-100"
-                              >
-                                <MessageCircle className="h-3 w-3" />
-                                WhatsApp
-                              </a>
-                            )}
-                          </div>
-                        )}
-
-                        {business.notes && (
-                          <div className="rounded-lg bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
-                            <div className="mb-1 flex items-center gap-1 font-semibold uppercase tracking-tighter text-foreground/70">
-                              <Info className="h-3 w-3" />
-                              Insights
+                          {business.notes && (
+                            <div className="rounded-lg bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
+                              <div className="mb-1 flex items-center gap-1 font-semibold uppercase tracking-tighter text-foreground/70">
+                                <Info className="h-3 w-3" />
+                                Insights
+                              </div>
+                              {business.notes}
                             </div>
-                            {business.notes}
-                          </div>
-                        )}
-                      </CardContent>
-                      <CardFooter className="grid grid-cols-2 gap-2 pt-0">
-                        <a 
-                          href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business.name} ${business.address}`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={cn(
-                            buttonVariants({ variant: "outline" }),
-                            "w-full rounded-xl border-muted hover:bg-primary hover:text-primary-foreground"
                           )}
-                        >
-                          <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                          Maps
-                        </a>
-                        <Button 
-                          variant="outline" 
-                          className="rounded-xl border-muted hover:bg-primary hover:text-primary-foreground"
-                          onClick={() => {
-                            const text = `Hi ${business.name}, I noticed you don't have a website and I'd love to help you build one!`;
-                            const mailto = `mailto:?subject=Helping ${business.name} grow online&body=${encodeURIComponent(text)}`;
-                            window.location.href = mailto;
-                          }}
-                        >
-                          <Phone className="mr-1.5 h-3.5 w-3.5" />
-                          Contact
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  </motion.div>
-                ))}
-              </motion.div>
+                        </CardContent>
+                        <CardFooter className="grid grid-cols-2 gap-2 pt-0">
+                          <a 
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business.name} ${business.address}`)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              buttonVariants({ variant: "outline" }),
+                              "w-full rounded-xl border-muted hover:bg-primary hover:text-primary-foreground"
+                            )}
+                          >
+                            <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                            Maps
+                          </a>
+                          <Button 
+                            variant="outline" 
+                            className="rounded-xl border-muted hover:bg-primary hover:text-primary-foreground"
+                            onClick={() => {
+                              const text = `Hi ${business.name}, I noticed you don't have a website and I'd love to help you build one!`;
+                              const mailto = `mailto:${business.email || ''}?subject=Helping ${business.name} grow online&body=${encodeURIComponent(text)}`;
+                              window.location.href = mailto;
+                            }}
+                          >
+                            {business.email ? <Mail className="mr-1.5 h-3.5 w-3.5" /> : <Phone className="mr-1.5 h-3.5 w-3.5" />}
+                            Contact
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </motion.div>
+
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                  <div className="flex flex-col items-center justify-center gap-4 py-8">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage === 1}
+                        onClick={() => {
+                          setCurrentPage(p => Math.max(1, p - 1));
+                          window.scrollTo({ top: 400, behavior: "smooth" });
+                        }}
+                        className="rounded-xl"
+                      >
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                          <Button
+                            key={page}
+                            variant={currentPage === page ? "default" : "ghost"}
+                            size="sm"
+                            className="h-8 w-8 rounded-full p-0 text-xs"
+                            onClick={() => {
+                              setCurrentPage(page);
+                              window.scrollTo({ top: 400, behavior: "smooth" });
+                            }}
+                          >
+                            {page}
+                          </Button>
+                        ))}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={currentPage === totalPages}
+                        onClick={() => {
+                          setCurrentPage(p => Math.min(totalPages, p + 1));
+                          window.scrollTo({ top: 400, behavior: "smooth" });
+                        }}
+                        className="rounded-xl"
+                      >
+                        Next
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Page {currentPage} of {totalPages} • Showing {paginatedResults.length} of {displayedResults.length} leads
+                    </p>
+                  </div>
+                )}
+              </div>
             ) : view === "bookmarks" ? (
               <motion.div 
                 key="empty-bookmarks"
